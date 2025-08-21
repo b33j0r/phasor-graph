@@ -29,8 +29,8 @@ pub fn Csr(comptime NodeWeight: type, comptime EdgeWeight: type) type {
         /// Memory allocator
         allocator: Allocator,
 
-        const NodeIndex = u32;
-        const EdgeIndex = usize;
+        pub const NodeIndex = u32;
+        pub const EdgeIndex = usize;
 
         /// Error type for CSR operations
         pub const CsrError = error{
@@ -185,8 +185,11 @@ pub fn Csr(comptime NodeWeight: type, comptime EdgeWeight: type) type {
 
         /// Check if edge exists between source and target
         pub fn containsEdge(self: *const Self, source: NodeIndex, target: NodeIndex) bool {
-            _ = self.findEdgePos(source, target) catch return false;
-            return true;
+            _ = self.findEdgePos(source, target) catch |err| switch (err) {
+                error.EdgeExists => return true,
+                else => return false,
+            };
+            return false;
         }
 
         /// Get out-degree of a node
