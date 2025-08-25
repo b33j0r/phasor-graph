@@ -2,7 +2,6 @@ const std = @import("std");
 
 /// Breadth-first search from a start node
 /// Calls visitor function for each node in BFS order
-/// TODO: SIMD acceleration for batch processing of neighbor sets in dense graphs
 pub fn bfs(
     comptime NodeIndex: type,
     allocator: std.mem.Allocator,
@@ -15,7 +14,6 @@ pub fn bfs(
 
     var visited = try allocator.alloc(bool, node_count);
     defer allocator.free(visited);
-    // TODO: Use Zig vector for visited array initialization when node_count is vectorizable
     @memset(visited, false);
 
     var queue = std.ArrayListUnmanaged(NodeIndex).empty;
@@ -29,7 +27,6 @@ pub fn bfs(
         visitor(current);
 
         const neighbors_slice = neighbors_fn(current);
-        // TODO: SIMD opportunity for parallel neighbor visitation checks
         for (neighbors_slice) |neighbor| {
             if (!visited[neighbor]) {
                 visited[neighbor] = true;
@@ -53,14 +50,12 @@ pub fn dfs(
 
     const visited = try allocator.alloc(bool, node_count);
     defer allocator.free(visited);
-    // TODO: Use Zig vector for visited array initialization when node_count is vectorizable
     @memset(visited, false);
 
     try dfsRecursive(NodeIndex, start, visited, neighbors_fn, visitor);
 }
 
 /// Internal recursive DFS implementation
-/// TODO: Convert to iterative version with explicit stack for better SIMD opportunities
 fn dfsRecursive(
     comptime NodeIndex: type,
     node: NodeIndex,
@@ -72,7 +67,6 @@ fn dfsRecursive(
     visitor(node);
 
     const neighbors_slice = neighbors_fn(node);
-    // TODO: SIMD opportunity for parallel neighbor visitation checks
     for (neighbors_slice) |neighbor| {
         if (!visited[neighbor]) {
             try dfsRecursive(NodeIndex, neighbor, visited, neighbors_fn, visitor);
@@ -82,7 +76,6 @@ fn dfsRecursive(
 
 /// Iterative DFS implementation using explicit stack
 /// More suitable for SIMD optimization than recursive version
-/// TODO: SIMD acceleration for stack operations and neighbor processing
 pub fn dfsIterative(
     comptime NodeIndex: type,
     allocator: std.mem.Allocator,

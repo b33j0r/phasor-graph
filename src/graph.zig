@@ -182,7 +182,6 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
 
         /// Breadth-first search from a start node
         /// Calls visitor function for each node in BFS order
-        /// TODO: SIMD acceleration for batch neighbor processing and visited array operations
         pub fn bfs(self: *Self, allocator: std.mem.Allocator, start: NodeIndex, visitor: anytype) !void {
             const n = self.nodeCount();
             if (start >= n) return;
@@ -203,7 +202,6 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
                 visitor(current);
 
                 const neighbors_slice = self.neighbors(current);
-                // TODO: SIMD opportunity for parallel neighbor visitation checks
                 for (neighbors_slice) |neighbor| {
                     if (!visited[neighbor]) {
                         visited[neighbor] = true;
@@ -215,26 +213,22 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
 
         /// Depth-first search from a start node
         /// Calls visitor function for each node in DFS order
-        /// TODO: SIMD acceleration for batch neighbor processing and visited array operations
         pub fn dfs(self: *Self, allocator: std.mem.Allocator, start: NodeIndex, visitor: anytype) !void {
             const n = self.nodeCount();
             if (start >= n) return;
 
             const visited = try allocator.alloc(bool, n);
             defer allocator.free(visited);
-            // TODO: Use Zig vector for visited array initialization when n is vectorizable
             @memset(visited, false);
 
             try self.dfsRecursive(start, visited, visitor);
         }
 
-        /// TODO: Convert to iterative version with explicit stack for better SIMD opportunities
         fn dfsRecursive(self: *Self, node: NodeIndex, visited: []bool, visitor: anytype) !void {
             visited[node] = true;
             visitor(node);
 
             const neighbors_slice = self.neighbors(node);
-            // TODO: SIMD opportunity for parallel neighbor visitation checks
             for (neighbors_slice) |neighbor| {
                 if (!visited[neighbor]) {
                     try self.dfsRecursive(neighbor, visited, visitor);
@@ -272,11 +266,9 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
             // Calculate in-degrees for all nodes
             var in_degrees = try allocator.alloc(u32, n);
             defer allocator.free(in_degrees);
-            // TODO: Use Zig vector for in-degree initialization when n is vectorizable
             @memset(in_degrees, 0);
 
             // Count incoming edges for each node
-            // TODO: SIMD optimization for parallel in-degree counting
             for (0..n) |node| {
                 const neighbors_slice = self.neighbors(@intCast(node));
                 for (neighbors_slice) |neighbor| {
@@ -288,7 +280,6 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
             var queue = std.ArrayListUnmanaged(NodeIndex).empty;
             defer queue.deinit(allocator);
 
-            // TODO: SIMD acceleration for finding zero in-degree nodes
             for (0..n) |i| {
                 if (in_degrees[i] == 0) {
                     try queue.append(allocator, @intCast(i));
@@ -305,7 +296,6 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
 
                 // Reduce in-degree for all neighbors
                 const neighbors_slice = self.neighbors(current);
-                // TODO: SIMD opportunity for batch in-degree updates
                 for (neighbors_slice) |neighbor| {
                     in_degrees[neighbor] -= 1;
                     if (in_degrees[neighbor] == 0) {
@@ -328,18 +318,15 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
 
         /// Check if the graph has any cycles using DFS
         /// This is more efficient than topological sort if you only need to detect cycles
-        /// TODO: SIMD acceleration for color array operations and neighbor processing
         pub fn hasCycles(self: *Self, allocator: std.mem.Allocator) !bool {
             const n = self.nodeCount();
             if (n == 0) return false;
 
             const colors = try allocator.alloc(Color, n);
             defer allocator.free(colors);
-            // TODO: Use Zig vector for color array initialization when n is vectorizable
             @memset(colors, .white);
 
             // Check each component
-            // TODO: SIMD opportunity for parallel component checking in disconnected graphs
             for (0..n) |i| {
                 if (colors[i] == .white) {
                     if (try self.dfsHasCycles(@intCast(i), colors)) {
@@ -353,12 +340,10 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
 
         /// Internal DFS function for cycle detection
         /// Uses three-color approach: white (unvisited), gray (being processed), black (finished)
-        /// TODO: SIMD acceleration for neighbor color checking
         fn dfsHasCycles(self: *Self, node: NodeIndex, colors: []Color) !bool {
             colors[node] = .gray;
 
             const neighbors_slice = self.neighbors(node);
-            // TODO: SIMD acceleration for neighbor color checking
             for (neighbors_slice) |neighbor| {
                 switch (colors[neighbor]) {
                     .gray => return true, // Back edge found - cycle detected

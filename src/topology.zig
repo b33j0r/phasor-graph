@@ -4,7 +4,7 @@ const std = @import("std");
 pub fn TopologicalSortResult(comptime NodeIndex: type) type {
     return struct {
         const Self = @This();
-        
+
         /// Topologically sorted node indices
         order: []NodeIndex,
         /// True if the graph has cycles (partial order returned)
@@ -20,7 +20,6 @@ pub fn TopologicalSortResult(comptime NodeIndex: type) type {
 /// Kahn's algorithm for topological sorting
 /// Returns nodes in dependency order (dependencies come before dependents)
 /// If the graph has cycles, returns partial order and sets has_cycles to true
-/// TODO: SIMD acceleration for in-degree calculations and batch queue operations
 pub fn topologicalSort(
     comptime NodeIndex: type,
     allocator: std.mem.Allocator,
@@ -38,11 +37,9 @@ pub fn topologicalSort(
     // Calculate in-degrees for all nodes
     var in_degrees = try allocator.alloc(u32, node_count);
     defer allocator.free(in_degrees);
-    // TODO: Use Zig vector for in-degree initialization when node_count is vectorizable
     @memset(in_degrees, 0);
 
     // Count incoming edges for each node
-    // TODO: SIMD optimization for parallel in-degree counting
     for (0..node_count) |node| {
         const neighbors_slice = neighbors_fn(@as(NodeIndex, @intCast(node)));
         for (neighbors_slice) |neighbor| {
@@ -54,7 +51,6 @@ pub fn topologicalSort(
     var queue = std.ArrayListUnmanaged(NodeIndex).empty;
     defer queue.deinit(allocator);
 
-    // TODO: SIMD acceleration for finding zero in-degree nodes
     for (0..node_count) |i| {
         if (in_degrees[i] == 0) {
             try queue.append(allocator, @intCast(i));
@@ -71,7 +67,6 @@ pub fn topologicalSort(
 
         // Reduce in-degree for all neighbors
         const neighbors_slice = neighbors_fn(current);
-        // TODO: SIMD opportunity for batch in-degree updates
         for (neighbors_slice) |neighbor| {
             in_degrees[neighbor] -= 1;
             if (in_degrees[neighbor] == 0) {
@@ -94,7 +89,6 @@ const Color = enum { white, gray, black };
 
 /// Check if the graph has any cycles using DFS
 /// This is more efficient than topological sort if you only need to detect cycles
-/// TODO: SIMD acceleration for color array operations and neighbor processing
 pub fn hasCycles(
     comptime NodeIndex: type,
     allocator: std.mem.Allocator,
@@ -105,11 +99,9 @@ pub fn hasCycles(
 
     const colors = try allocator.alloc(Color, node_count);
     defer allocator.free(colors);
-    // TODO: Use Zig vector for color array initialization when node_count is vectorizable
     @memset(colors, .white);
 
     // Check each component
-    // TODO: SIMD opportunity for parallel component checking in disconnected graphs
     for (0..node_count) |i| {
         if (colors[i] == .white) {
             if (try dfsHasCycles(NodeIndex, @intCast(i), colors, neighbors_fn)) {
@@ -133,7 +125,6 @@ fn dfsHasCycles(
     colors[node] = .gray;
 
     const neighbors_slice = neighbors_fn(node);
-    // TODO: SIMD acceleration for neighbor color checking
     for (neighbors_slice) |neighbor| {
         switch (colors[neighbor]) {
             .gray => return true, // Back edge found - cycle detected
@@ -152,7 +143,6 @@ fn dfsHasCycles(
 
 /// Iterative version of cycle detection using explicit stack
 /// More suitable for SIMD optimization than recursive version
-/// TODO: SIMD acceleration for stack operations and batch color updates
 pub fn hasCyclesIterative(
     comptime NodeIndex: type,
     allocator: std.mem.Allocator,
@@ -182,7 +172,7 @@ pub fn hasCyclesIterative(
 
             while (stack.items.len > 0) {
                 const entry = stack.pop();
-                
+
                 if (entry.visiting) {
                     // Visiting phase
                     if (colors[entry.node] == .gray) {
@@ -192,7 +182,7 @@ pub fn hasCyclesIterative(
                         colors[entry.node] = .gray;
                         // Add finishing entry
                         try stack.append(.{ .node = entry.node, .visiting = false });
-                        
+
                         // Add neighbors for visiting
                         const neighbors_slice = neighbors_fn(entry.node);
                         for (neighbors_slice) |neighbor| {

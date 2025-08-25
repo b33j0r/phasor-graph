@@ -86,7 +86,6 @@ pub fn getZeroValue(comptime T: type) T {
 }
 
 /// Add two weight values
-/// TODO: SIMD acceleration opportunity for vector addition when processing multiple weights simultaneously
 pub fn addWeights(comptime T: type, a: T, b: T) T {
     return switch (@typeInfo(T)) {
         .int, .float => a + b,
@@ -104,7 +103,6 @@ pub fn addWeights(comptime T: type, a: T, b: T) T {
 }
 
 /// Compare two weight values
-/// TODO: SIMD acceleration opportunity for vectorized comparisons in batch operations
 pub fn compareWeights(comptime T: type, a: T, b: T) std.math.Order {
     return switch (@typeInfo(T)) {
         .int, .float => std.math.order(a, b),
@@ -139,7 +137,6 @@ pub fn dijkstra(comptime NodeIndex: type, comptime EdgeType: type, allocator: st
     defer allocator.free(predecessors);
 
     // Initialize
-    // TODO: SIMD acceleration for memory initialization of large arrays
     @memset(distances, null);
     @memset(visited, false);
     @memset(predecessors, null);
