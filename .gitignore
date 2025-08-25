@@ -30,7 +30,19 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+# Zig build outputs
+zig-out/
+zig-cache/
+.zig-cache/
 
+# Editors/IDEs
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
 ### macOS template
 # General
 .DS_Store
