@@ -55,20 +55,22 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
         }
 
         /// Get neighbors of a node as a slice
+        /// DEPRECATED: Use neighborIterator() instead for better backend compatibility
         pub fn neighbors(self: *Self, node: NodeIndex) []const NodeIndex {
             if (@hasDecl(Storage, "neighborsSlice")) {
                 return self.storage.neighborsSlice(node);
             } else {
-                @compileError("Storage implementation does not support neighbor iteration");
+                @compileError("Storage implementation does not support slice-based neighbor access. Use neighborIterator() instead.");
             }
         }
 
         /// Get edge weights from a node as a slice
+        /// DEPRECATED: Use neighborIterator() instead for better backend compatibility
         pub fn edges(self: *Self, node: NodeIndex) []const EdgeType {
             if (@hasDecl(Storage, "edgesSlice")) {
                 return self.storage.edgesSlice(node);
             } else {
-                @compileError("Storage implementation does not support edge iteration");
+                @compileError("Storage implementation does not support slice-based edge access. Use neighborIterator() instead.");
             }
         }
 
@@ -81,39 +83,10 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
             }
         }
 
-        /// Iterator for neighbors with edge weights
-        pub fn NeighborIterator(comptime G: type) type {
-            return struct {
-                const Iterator = @This();
-
-                pub const Item = struct {
-                    neighbor: NodeIndex,
-                    edge: G.Edge,
-                };
-
-                neighbors: []const NodeIndex,
-                edges: []const G.Edge,
-                index: usize,
-
-                pub fn next(iter: *Iterator) ?Item {
-                    if (iter.index >= iter.neighbors.len) return null;
-                    const result = Item{
-                        .neighbor = iter.neighbors[iter.index],
-                        .edge = iter.edges[iter.index],
-                    };
-                    iter.index += 1;
-                    return result;
-                }
-            };
-        }
-
         /// Create an iterator over neighbors and their edge weights
-        pub fn neighborIterator(self: *Self, node: NodeIndex) NeighborIterator(Self) {
-            return NeighborIterator(Self){
-                .neighbors = self.neighbors(node),
-                .edges = self.edges(node),
-                .index = 0,
-            };
+        /// Delegates to the storage backend's iterator implementation
+        pub fn neighborIterator(self: *Self, node: NodeIndex) Storage.NeighborIterator {
+            return self.storage.neighborIterator(node);
         }
 
         /// Dijkstra's shortest path algorithm
@@ -201,8 +174,9 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
                 const current = queue.orderedRemove(0);
                 visitor(current);
 
-                const neighbors_slice = self.neighbors(current);
-                for (neighbors_slice) |neighbor| {
+                var iter = self.neighborIterator(current);
+                while (iter.next()) |neighbor_info| {
+                    const neighbor = neighbor_info.neighbor;
                     if (!visited[neighbor]) {
                         visited[neighbor] = true;
                         try queue.append(allocator, neighbor);
@@ -228,8 +202,9 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
             visited[node] = true;
             visitor(node);
 
-            const neighbors_slice = self.neighbors(node);
-            for (neighbors_slice) |neighbor| {
+            var iter = self.neighborIterator(node);
+            while (iter.next()) |neighbor_info| {
+                const neighbor = neighbor_info.neighbor;
                 if (!visited[neighbor]) {
                     try self.dfsRecursive(neighbor, visited, visitor);
                 }
@@ -270,9 +245,9 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
 
             // Count incoming edges for each node
             for (0..n) |node| {
-                const neighbors_slice = self.neighbors(@intCast(node));
-                for (neighbors_slice) |neighbor| {
-                    in_degrees[neighbor] += 1;
+                var iter = self.neighborIterator(@intCast(node));
+                while (iter.next()) |neighbor_info| {
+                    in_degrees[neighbor_info.neighbor] += 1;
                 }
             }
 
@@ -295,8 +270,9 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
                 try result.append(allocator, current);
 
                 // Reduce in-degree for all neighbors
-                const neighbors_slice = self.neighbors(current);
-                for (neighbors_slice) |neighbor| {
+                var iter = self.neighborIterator(current);
+                while (iter.next()) |neighbor_info| {
+                    const neighbor = neighbor_info.neighbor;
                     in_degrees[neighbor] -= 1;
                     if (in_degrees[neighbor] == 0) {
                         try queue.append(allocator, neighbor);
@@ -343,8 +319,9 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
         fn dfsHasCycles(self: *Self, node: NodeIndex, colors: []Color) !bool {
             colors[node] = .gray;
 
-            const neighbors_slice = self.neighbors(node);
-            for (neighbors_slice) |neighbor| {
+            var iter = self.neighborIterator(node);
+            while (iter.next()) |neighbor_info| {
+                const neighbor = neighbor_info.neighbor;
                 switch (colors[neighbor]) {
                     .gray => return true, // Back edge found - cycle detected
                     .white => {

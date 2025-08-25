@@ -244,7 +244,7 @@ pub fn Csr(comptime NodeWeight: type, comptime EdgeWeight: type) type {
 
         // Private helper methods
 
-        fn neighborsRange(self: *const Self, node: NodeIndex) struct { start: usize, end: usize } {
+        pub fn neighborsRange(self: *const Self, node: NodeIndex) struct { start: usize, end: usize } {
             const start = self.row.items[node];
             const end = self.row.items[node + 1];
             return .{ .start = start, .end = end };

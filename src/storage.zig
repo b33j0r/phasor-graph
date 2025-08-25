@@ -19,6 +19,11 @@ pub fn StorageInterface(comptime NodeType: type, comptime EdgeType: type) type {
         // - edgeCount(self: *Self) -> usize
         // - getNodeWeight(self: *Self, node: NodeIndex) -> NodeType
         // - setNodeWeight(self: *Self, node: NodeIndex, weight: NodeType) -> void
+        // - outDegree(self: *Self, node: NodeIndex) -> usize
+        // - neighborIterator(self: *Self, node: NodeIndex) -> Iterator
+        //     Iterator API:
+        //       pub const Item = struct { neighbor: NodeIndex, edge: EdgeType }
+        //       next(self: *Iterator) -> ?Item
     };
 }
 
@@ -87,6 +92,49 @@ pub fn CsrStorage(comptime NodeType: type, comptime EdgeType: type) type {
         pub fn outDegree(self: *Self, node: NodeIndex) usize {
             return self.csr_graph.outDegree(node);
         }
+
+        /// Iterator for neighbors with edge weights
+        pub const NeighborIterator = struct {
+            const Iterator = @This();
+
+            pub const Item = struct {
+                neighbor: NodeIndex,
+                edge: EdgeType,
+            };
+
+            csr_graph: *const CsrImpl,
+            node: NodeIndex,
+            current_index: usize,
+            end_index: usize,
+
+            pub fn next(iter: *Iterator) ?Item {
+                if (iter.current_index >= iter.end_index) return null;
+
+                const neighbor = iter.csr_graph.column.items[iter.current_index];
+                const edge = if (@sizeOf(EdgeType) == 0)
+                    iter.csr_graph.edges.get(iter.current_index)
+                else
+                    iter.csr_graph.edges.items[iter.current_index];
+
+                iter.current_index += 1;
+
+                return Item{
+                    .neighbor = neighbor,
+                    .edge = edge,
+                };
+            }
+        };
+
+        /// Create iterator for neighbors and their edge weights
+        pub fn neighborIterator(self: *Self, node: NodeIndex) NeighborIterator {
+            const range = self.csr_graph.neighborsRange(node);
+            return NeighborIterator{
+                .csr_graph = &self.csr_graph,
+                .node = node,
+                .current_index = range.start,
+                .end_index = range.end,
+            };
+        }
     };
 }
 
@@ -100,30 +148,28 @@ pub fn MatrixStorage(comptime NodeType: type, comptime EdgeType: type) type {
         pub const EdgeIndex = usize;
 
         allocator: std.mem.Allocator,
-        node_weights: std.ArrayList(NodeType),
+        node_weights: std.ArrayListUnmanaged(NodeType) = .empty,
         // Store adjacency matrix as optional edge weights (null = no edge)
-        adjacency_matrix: std.ArrayList(?EdgeType),
+        adjacency_matrix: std.ArrayListUnmanaged(?EdgeType) = .empty,
         node_capacity: usize,
 
         pub fn init(allocator: std.mem.Allocator) Self {
             return Self{
                 .allocator = allocator,
-                .node_weights = std.ArrayList(NodeType).init(allocator),
-                .adjacency_matrix = std.ArrayList(?EdgeType).init(allocator),
                 .node_capacity = 0,
             };
         }
 
         pub fn deinit(self: *Self) void {
-            self.node_weights.deinit();
-            self.adjacency_matrix.deinit();
+            self.node_weights.deinit(self.allocator);
+            self.adjacency_matrix.deinit(self.allocator);
         }
 
         pub fn addNode(self: *Self, weight: NodeType) !NodeIndex {
             const new_node = @as(NodeIndex, @intCast(self.node_weights.items.len));
 
             // Add node weight
-            try self.node_weights.append(weight);
+            try self.node_weights.append(self.allocator, weight);
 
             // Expand adjacency matrix
             const new_capacity = self.node_weights.items.len;
@@ -132,7 +178,7 @@ pub fn MatrixStorage(comptime NodeType: type, comptime EdgeType: type) type {
                 self.node_capacity = new_capacity;
 
                 // Resize matrix to accommodate new node
-                try self.adjacency_matrix.resize(new_capacity * new_capacity);
+                try self.adjacency_matrix.resize(self.allocator, new_capacity * new_capacity);
 
                 // Initialize new entries to null
                 for (old_capacity * old_capacity..new_capacity * new_capacity) |i| {
@@ -250,6 +296,51 @@ pub fn MatrixStorage(comptime NodeType: type, comptime EdgeType: type) type {
             }
 
             return degree;
+        }
+
+        /// Iterator for neighbors with edge weights - lazy row scanning
+        pub const NeighborIterator = struct {
+            const Iterator = @This();
+
+            pub const Item = struct {
+                neighbor: NodeIndex,
+                edge: EdgeType,
+            };
+
+            matrix_storage: *const Self,
+            node: NodeIndex,
+            current_col: NodeIndex,
+            node_count: NodeIndex,
+
+            pub fn next(iter: *Iterator) ?Item {
+                const row_start = iter.node * iter.matrix_storage.node_capacity;
+
+                // Scan row for next non-null edge
+                while (iter.current_col < iter.node_count) {
+                    const matrix_index = row_start + iter.current_col;
+                    const current_col = iter.current_col;
+                    iter.current_col += 1;
+
+                    if (iter.matrix_storage.adjacency_matrix.items[matrix_index]) |edge_weight| {
+                        return Item{
+                            .neighbor = current_col,
+                            .edge = edge_weight,
+                        };
+                    }
+                }
+
+                return null;
+            }
+        };
+
+        /// Create iterator for neighbors and their edge weights - no allocations required
+        pub fn neighborIterator(self: *Self, node: NodeIndex) NeighborIterator {
+            return NeighborIterator{
+                .matrix_storage = self,
+                .node = node,
+                .current_col = 0,
+                .node_count = @intCast(self.nodeCount()),
+            };
         }
     };
 }

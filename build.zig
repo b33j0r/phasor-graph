@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) void {
     // to our consumers. We must give it a name because a Zig package can expose
     // multiple modules and consumers will need to be able to specify which
     // module they want to access.
-    const mod = b.addModule("phasor_graph", .{
+    const mod = b.addModule("phasor-graph", .{
         // The root source file is the "entry point" of this module. Users of
         // this module will only be able to access public declarations contained
         // in this file, which means that if you have declarations that you
@@ -149,15 +149,41 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
-    // Just like flags, top level steps are also listed in the `--help` menu.
-    //
-    // The Zig build system is entirely implemented in userland, which means
-    // that it cannot hook into private compiler APIs. All compilation work
-    // orchestrated by the build system will result in other Zig compiler
-    // subcommands being invoked with the right flags defined. You can observe
-    // these invocations when one fails (or you pass a flag to increase
-    // verbosity) to validate assumptions and diagnose problems.
-    //
-    // Lastly, the Zig build system is relatively simple and self-contained,
-    // and reading its source code will allow you to master it.
+    // Benchmark executables
+    const bench_main = b.addExecutable(.{
+        .name = "bench_main",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bench/bench_main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "phasor-graph", .module = mod },
+            },
+        }),
+    });
+
+    const bench_traversal = b.addExecutable(.{
+        .name = "bench_traversal",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bench/bench_traversal.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "phasor-graph", .module = mod },
+            },
+        }),
+    });
+
+    // Run steps for benchmarks
+    const run_bench_main = b.addRunArtifact(bench_main);
+    const run_bench_traversal = b.addRunArtifact(bench_traversal);
+
+    // Install benchmark executables
+    b.installArtifact(bench_main);
+    b.installArtifact(bench_traversal);
+
+    // A top level step for running all benchmarks
+    const bench_step = b.step("bench", "Run benchmarks comparing CsrStorage vs MatrixStorage");
+    bench_step.dependOn(&run_bench_main.step);
+    bench_step.dependOn(&run_bench_traversal.step);
 }

@@ -1,24 +1,45 @@
 # `phasor-graph`
 
-A small graph library for Zig with generic node/edge types and pluggable storage backends. Inspired by petgraph, but very much a subset of
-its functionality.
+A small graph library for Zig with generic node/edge types and pluggable storage backends. Inspired by petgraph, but focused on practical
+usability with a unified iterator-based API.
 
-## Features
+**Important:** This library is in early development.
 
-- [x] **Generic Graph Structure**—Support for custom node and edge weight types
-- [x] **Compressed Sparse Row** storage backend (swappable)
+### Storage Backends
+
+- **CSR (Compressed Sparse Row)** - **Solid**: Default backend, optimized for sparse graphs, well-tested
+- **Adjacency Matrix** - **Experimental**: Suitable for small dense graphs, still gaining bake time
+
+### Features
+
+- [x] **Generic Graph Structure** - Support for custom node and edge weight types, including zero-sized types (`void`)
+- [x] **Pluggable Storage Backends** - CSR (default) and Matrix storage with unified iterator interface
+- [x] **Iterator-Based Neighbor Access** - No temporary allocations required for neighbor iteration
 - [x] **Graph Algorithms**
     - Dijkstra's shortest path algorithm
     - Breadth-First Search (BFS) traversal
     - Depth-First Search (DFS) traversal
     - Topological sorting with cycle detection
     - Standalone cycle detection
-- [x] **Neighbor Iteration**-Efficient neighbor access with edge weights
-- [x] **Visitor Pattern**-Custom visitor callbacks for graph traversals
+- [x] **Zero-Allocation Neighbor Iteration** - All storage backends support allocation-free neighbor access
+
+## Storage Backend Guidance
+
+- **Use CSR (default)** for sparse graphs where most nodes have few connections
+- **Use Matrix** for small dense graphs where you need O(1) edge lookup and don't mind O(V²) space
+
+```zig
+// CSR backend (default) - good for sparse graphs
+var sparse_graph = Graph(u32, f32, null).init(allocator);
+
+// Matrix backend - good for small dense graphs
+const MatrixStorage = @import("phasor-graph").MatrixStorage;
+var dense_graph = Graph(u32, f32, MatrixStorage(u32, f32)).init(allocator);
+```
 
 ## Usage
 
-### Basic Graph Operations
+### Quickstart with Iterator-Based Neighbors
 
 ```zig
 const std = @import("std");
@@ -29,7 +50,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // Create a graph with u32 node weights and f32 edge weights
+    // Create a graph with u32 node weights and f32 edge weights (CSR default)
     var graph = Graph(u32, f32, null).init(allocator);
     defer graph.deinit();
 
@@ -42,10 +63,16 @@ pub fn main() !void {
     _ = try graph.addEdge(a, b, 1.5);
     _ = try graph.addEdge(a, c, 2.0);
 
+    // Iterator-based neighbor access (no allocations!)
+    var iter = graph.neighborIterator(a);
+    while (iter.next()) |neighbor_info| {
+        std.debug.print("Neighbor: {}, Edge weight: {}\n", .{ neighbor_info.neighbor, neighbor_info.edge });
+    }
+
     // Check graph properties
     std.debug.print("Node count: {}\n", .{graph.nodeCount()});
     std.debug.print("Edge count: {}\n", .{graph.edgeCount()});
-    std.debug.print("Node {} weight: {}\n", .{ a, graph.getNodeWeight(a) });
+    std.debug.print("Out-degree of node {}: {}\n", .{ a, graph.outDegree(a) });
 }
 ```
 
@@ -152,22 +179,26 @@ In your `build.zig`:
 
 ```zig
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    // ...
 
     const phasor_graph = b.dependency("phasor-graph", .{
         .target = target,
         .optimize = optimize,
     });
+    const phasor_graph_mod = phasor_graph.module("phasor-graph");
 
+    // ...
+  
     const exe = b.addExecutable(.{
         .name = "my-app",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{ .name = "phasor-graph", .module = mod },
+        },
     });
 
-    exe.root_module.addImport("phasor-graph", phasor_graph.module("phasor-graph"));
-    b.installArtifact(exe);
+    // ...
 }
 ```
