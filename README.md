@@ -181,21 +181,21 @@ In your `build.zig`:
 pub fn build(b: *std.Build) void {
     // ...
 
-    const phasor_graph = b.dependency("phasor-graph", .{
+    const phasor_graph_dep = b.dependency("phasor_graph", .{
         .target = target,
         .optimize = optimize,
     });
-    const phasor_graph_mod = phasor_graph.module("phasor-graph");
+    const phasor_graph_module = phasor_graph_dep.module("phasor-graph");
 
     // ...
-  
+
     const exe = b.addExecutable(.{
         .name = "my-app",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "phasor-graph", .module = mod },
+            .{ .name = "phasor-graph", .module = phasor_graph_module },
         },
     });
 
