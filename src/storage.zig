@@ -69,7 +69,7 @@ pub fn CsrStorage(comptime NodeType: type, comptime EdgeType: type) type {
             return self.csr_graph.edgeCount();
         }
 
-        pub fn getNodeWeight(self: *Self, node: NodeIndex) NodeType {
+        pub fn getNodeWeight(self: *const Self, node: NodeIndex) NodeType {
             return self.csr_graph.getNodeWeight(node);
         }
 
@@ -244,7 +244,7 @@ pub fn MatrixStorage(comptime NodeType: type, comptime EdgeType: type) type {
             return count;
         }
 
-        pub fn getNodeWeight(self: *Self, node: NodeIndex) NodeType {
+        pub fn getNodeWeight(self: *const Self, node: NodeIndex) NodeType {
             return self.node_weights.items[node];
         }
 

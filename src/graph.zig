@@ -46,7 +46,7 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
             return self.storage.edgeCount();
         }
 
-        pub fn getNodeWeight(self: *Self, node: NodeIndex) NodeType {
+        pub fn getNodeWeight(self: *const Self, node: NodeIndex) NodeType {
             return self.storage.getNodeWeight(node);
         }
 

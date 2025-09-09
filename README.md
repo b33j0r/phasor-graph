@@ -172,7 +172,7 @@ pub fn socialNetworkExample(allocator: std.mem.Allocator) !void {
 At the command line:
 
 ```shell
-zig fetch --save https://github.com/b33j0r/phasor-graph
+zig fetch --save git+https://github.com/b33j0r/phasor-graph
 ```
 
 In your `build.zig`:

@@ -237,3 +237,61 @@ test "Route planning with Dijkstra algorithm" {
     try std.testing.expect(path_to_work[1] == school);
     try std.testing.expect(path_to_work[2] == work);
 }
+
+test "ECS schedule ordering with Before/After edges" {
+    const allocator = std.testing.allocator;
+
+    const Relationship = enum { Before, After };
+
+    const ScheduleGraph = Graph([]const u8, Relationship, null);
+    var graph = ScheduleGraph.init(allocator);
+    defer graph.deinit();
+
+    // Default schedules
+    const start = try graph.addNode("StartFrame");
+    const update = try graph.addNode("Update");
+    const render = try graph.addNode("Render");
+    const end = try graph.addNode("EndFrame");
+
+    // Independent schedule
+    const physics = try graph.addNode("PhysicsUpdate");
+
+    // Default ordering (Start -> Update -> Render -> End)
+    _ = try graph.addEdge(start, update, .Before);
+    _ = try graph.addEdge(update, render, .Before);
+    _ = try graph.addEdge(render, end, .Before);
+
+    // User-defined schedule: AfterUpdate
+    const after_update = try graph.addNode("AfterUpdate");
+
+    // Mix of Before/After constraints:
+    // AfterUpdate must be after Update - convert "After" to "Before"
+    _ = try graph.addEdge(update, after_update, .Before); // Update -> AfterUpdate
+    // …and before Render
+    _ = try graph.addEdge(after_update, render, .Before);
+
+    // Another example: Diagnostics should run after Render but before End
+    const diagnostics = try graph.addNode("Diagnostics");
+    _ = try graph.addEdge(render, diagnostics, .Before); // Render -> Diagnostics
+    _ = try graph.addEdge(diagnostics, end, .Before);
+
+    // Now topo sort
+    var result = try graph.topologicalSort(allocator);
+    defer result.deinit();
+    try std.testing.expect(!result.has_cycles);
+
+    // Map node -> position
+    var positions: std.AutoHashMapUnmanaged(u32, usize) = .empty;
+    defer positions.deinit(allocator);
+    for (result.order, 0..) |node, i| try positions.put(allocator, node, i);
+
+    // Expected relative order:
+    try std.testing.expect(positions.get(start).? < positions.get(update).?);
+    try std.testing.expect(positions.get(update).? < positions.get(after_update).?);
+    try std.testing.expect(positions.get(after_update).? < positions.get(render).?);
+    try std.testing.expect(positions.get(render).? < positions.get(diagnostics).?);
+    try std.testing.expect(positions.get(diagnostics).? < positions.get(end).?);
+
+    // PhysicsUpdate exists but unconstrained
+    _ = positions.get(physics).?;
+}
