@@ -289,6 +289,102 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
             };
         }
 
+        /// Topologically sort only the subgraph reachable from a given start node.
+        /// Returns nodes in dependency order within that reachable subgraph.
+        /// If a cycle exists within the reachable subgraph, returns partial order
+        /// and sets has_cycles = true.
+        pub fn topologicalSortFrom(self: *Self, allocator: std.mem.Allocator, start: NodeIndex) !TopologicalSortResult {
+            const n = self.nodeCount();
+            if (n == 0 or start >= n) {
+                return TopologicalSortResult{
+                    .order = try allocator.alloc(NodeIndex, 0),
+                    .has_cycles = false,
+                    .allocator = allocator,
+                };
+            }
+
+            // Phase 1: collect reachable set from start
+            var reachable = try allocator.alloc(bool, n);
+            defer allocator.free(reachable);
+            @memset(reachable, false);
+
+            var stack: std.ArrayListUnmanaged(NodeIndex) = .empty;
+            defer stack.deinit(allocator);
+
+            try stack.append(allocator, start);
+            reachable[start] = true;
+
+            while (stack.pop()) |u| {
+                var it = self.neighborIterator(u);
+                while (it.next()) |nb| {
+                    const v = nb.neighbor;
+                    if (!reachable[v]) {
+                        reachable[v] = true;
+                        try stack.append(allocator, v);
+                    }
+                }
+            }
+
+            // Phase 2: Kahn's algorithm over induced subgraph on reachable nodes
+            var indeg = try allocator.alloc(u32, n);
+            defer allocator.free(indeg);
+            @memset(indeg, 0);
+
+            var reachable_count: usize = 0;
+
+            // Compute in-degrees within the reachable subgraph
+            for (0..n) |i_usize| {
+                const i: NodeIndex = @intCast(i_usize);
+                if (!reachable[i]) continue;
+                reachable_count += 1;
+
+                var it = self.neighborIterator(i);
+                while (it.next()) |nb| {
+                    const v = nb.neighbor;
+                    if (reachable[v]) {
+                        indeg[v] += 1;
+                    }
+                }
+            }
+
+            // Initialize queue with reachable nodes having zero in-degree (within subgraph)
+            var queue: std.ArrayListUnmanaged(NodeIndex) = .empty;
+            defer queue.deinit(allocator);
+
+            for (0..n) |i_usize| {
+                const i: NodeIndex = @intCast(i_usize);
+                if (reachable[i] and indeg[i] == 0) {
+                    try queue.append(allocator, i);
+                }
+            }
+
+            var order_buf: std.ArrayListUnmanaged(NodeIndex) = .empty;
+            defer order_buf.deinit(allocator);
+
+            while (queue.items.len > 0) {
+                const u = queue.orderedRemove(0);
+                try order_buf.append(allocator, u);
+
+                var it = self.neighborIterator(u);
+                while (it.next()) |nb| {
+                    const v = nb.neighbor;
+                    if (!reachable[v]) continue;
+                    indeg[v] -= 1;
+                    if (indeg[v] == 0) {
+                        try queue.append(allocator, v);
+                    }
+                }
+            }
+
+            const has_cycles = (order_buf.items.len != reachable_count);
+
+            return TopologicalSortResult{
+                .order = try order_buf.toOwnedSlice(allocator),
+                .has_cycles = has_cycles,
+                .allocator = allocator,
+            };
+        }
+
         /// Color enum for cycle detection DFS
         const Color = enum { white, gray, black };
 

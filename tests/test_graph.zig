@@ -89,3 +89,91 @@ test "Graph basic operations - node and edge management" {
     try std.testing.expect(!try graph.addEdge(a, b, 1.0)); // Should return false
     try std.testing.expect(graph.edgeCount() == 3); // Edge count shouldn't change
 }
+
+test "topological sort from seed subgraph without cycles" {
+    const allocator = std.testing.allocator;
+
+    var g = Graph(void, u32, null).init(allocator);
+    defer g.deinit();
+
+    // Component A (reachable from a): a -> b, a -> c, b -> d, c -> d
+    const a = try g.addNode({});
+    const b = try g.addNode({});
+    const c = try g.addNode({});
+    const d = try g.addNode({});
+
+    // Disconnected Component B: e -> f
+    const e = try g.addNode({});
+    const f = try g.addNode({});
+
+    _ = try g.addEdge(a, b, 1);
+    _ = try g.addEdge(a, c, 1);
+    _ = try g.addEdge(b, d, 1);
+    _ = try g.addEdge(c, d, 1);
+
+    _ = try g.addEdge(e, f, 1);
+
+    var result = try g.topologicalSortFrom(allocator, a);
+    defer result.deinit();
+
+    // Expect exactly 4 nodes in order (a, b, c, d in some valid topo order)
+    try std.testing.expect(result.order.len == 4);
+
+    // Verify membership using a DynamicBitSet
+    var seen = try std.DynamicBitSet.initEmpty(allocator, g.nodeCount());
+    defer seen.deinit();
+    for (result.order) |n| seen.set(n);
+
+    try std.testing.expect(seen.isSet(a));
+    try std.testing.expect(seen.isSet(b));
+    try std.testing.expect(seen.isSet(c));
+    try std.testing.expect(seen.isSet(d));
+    try std.testing.expect(!seen.isSet(e));
+    try std.testing.expect(!seen.isSet(f));
+
+    // Verify partial order constraints: a before b and c; b and c before d
+    const idx = struct {
+        fn find(slice: []const Graph(void, u32, null).NodeIndex, v: Graph(void, u32, null).NodeIndex) usize {
+            var i: usize = 0;
+            while (i < slice.len) : (i += 1) {
+                if (slice[i] == v) return i;
+            }
+            return std.math.maxInt(usize);
+        }
+    };
+
+    const ia = idx.find(result.order, a);
+    const ib = idx.find(result.order, b);
+    const ic = idx.find(result.order, c);
+    const id = idx.find(result.order, d);
+
+    try std.testing.expect(ia < ib);
+    try std.testing.expect(ia < ic);
+    try std.testing.expect(ib < id or ic < id); // both b and c should be before d
+    try std.testing.expect(!result.has_cycles);
+}
+
+test "topological sort from seed subgraph detects cycles" {
+    const allocator = std.testing.allocator;
+
+    var g = Graph(void, u32, null).init(allocator);
+    defer g.deinit();
+
+    // Component with a cycle: x -> y -> z -> x
+    const x = try g.addNode({});
+    const y = try g.addNode({});
+    const z = try g.addNode({});
+
+    _ = try g.addEdge(x, y, 1);
+    _ = try g.addEdge(y, z, 1);
+    _ = try g.addEdge(z, x, 1);
+
+    var result = try g.topologicalSortFrom(allocator, x);
+    defer result.deinit();
+
+    // Cycle within reachable subgraph should be reported
+    try std.testing.expect(result.has_cycles);
+
+    // Partial order should be shorter than the reachable set (3)
+    try std.testing.expect(result.order.len < 3);
+}

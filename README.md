@@ -1,20 +1,18 @@
 # `phasor-graph`
 
-A small graph library for Zig with generic node/edge types and pluggable storage backends. Inspired by petgraph, but focused on practical
-usability with a unified iterator-based API.
-
-**Important:** This library is in early development.
+A small graph library for Zig with generic node/edge types and pluggable storage backends.
+Inspired by petgraph, but is not a direct port.
 
 ### Storage Backends
 
 - **CSR (Compressed Sparse Row)** - **Solid**: Default backend, optimized for sparse graphs, well-tested
-- **Adjacency Matrix** - **Experimental**: Suitable for small dense graphs, still gaining bake time
+- **Adjacency Matrix** - **Experimental**: Suitable for small dense graphs, mostly to demonstrate pluggability.
 
 ### Features
 
-- [x] **Generic Graph Structure** - Support for custom node and edge weight types, including zero-sized types (`void`)
-- [x] **Pluggable Storage Backends** - CSR (default) and Matrix storage with unified iterator interface
-- [x] **Iterator-Based Neighbor Access** - No temporary allocations required for neighbor iteration
+- [x] **Generic Graph Structure** — Support for custom node and edge weight types, including zero-sized types (`void`)
+- [x] **Pluggable Storage Backends** — CSR (default) and Matrix storage with a unified iterator interface
+- [x] **Iterator-Based Neighbor Access** — No temporary allocations required for neighbor iteration
 - [x] **Graph Algorithms**
     - Dijkstra's shortest path algorithm
     - Breadth-First Search (BFS) traversal
