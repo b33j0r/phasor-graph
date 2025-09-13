@@ -30,6 +30,10 @@ pub fn Graph(comptime NodeType: type, comptime EdgeType: type, comptime StorageT
             return self.storage.addNode(weight);
         }
 
+        pub fn removeNode(self: *Self, node: NodeIndex) !void {
+            return self.storage.removeNode(node);
+        }
+
         pub fn addEdge(self: *Self, source: NodeIndex, target: NodeIndex, weight: EdgeType) !bool {
             return self.storage.addEdge(source, target, weight);
         }

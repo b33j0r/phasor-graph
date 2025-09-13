@@ -53,6 +53,10 @@ pub fn CsrStorage(comptime NodeType: type, comptime EdgeType: type) type {
             return self.csr_graph.addNode(weight);
         }
 
+        pub fn removeNode(self: *Self, node: NodeIndex) !void {
+            return self.csr_graph.removeNode(node);
+        }
+
         pub fn addEdge(self: *Self, source: NodeIndex, target: NodeIndex, weight: EdgeType) !bool {
             return self.csr_graph.addEdge(source, target, weight);
         }

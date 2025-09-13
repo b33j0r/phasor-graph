@@ -177,3 +177,67 @@ test "topological sort from seed subgraph detects cycles" {
     // Partial order should be shorter than the reachable set (3)
     try std.testing.expect(result.order.len < 3);
 }
+
+test "Graph removeNode removes incident edges and renumbers" {
+    const allocator = std.testing.allocator;
+
+    var g = Graph(u32, u32, null).init(allocator);
+    defer g.deinit();
+
+    const a = try g.addNode(1); // 0
+    const b = try g.addNode(2); // 1
+    const c = try g.addNode(3); // 2
+    const d = try g.addNode(4); // 3
+
+    _ = try g.addEdge(a, b, 1);
+    _ = try g.addEdge(b, c, 1);
+    _ = try g.addEdge(c, a, 1);
+    _ = try g.addEdge(d, b, 1);
+    _ = try g.addEdge(b, b, 1); // self-loop
+
+    try std.testing.expect(g.nodeCount() == 4);
+    try std.testing.expect(g.edgeCount() == 5);
+
+    // Remove node b (index 1)
+    try g.removeNode(b);
+
+    // Now there should be 3 nodes; indices: a=0, c->1, d->2
+    try std.testing.expect(g.nodeCount() == 3);
+
+    // Edges incident to b removed; only c->a remains, which becomes 1->0
+    try std.testing.expect(g.edgeCount() == 1);
+    try std.testing.expect(g.containsEdge(1, 0));
+    try std.testing.expect(!g.containsEdge(0, 1));
+
+    // Check neighbors
+    try std.testing.expect(g.outDegree(0) == 0);
+    try std.testing.expect(g.outDegree(1) == 1);
+    const neigh1 = g.neighbors(1);
+    try std.testing.expect(neigh1.len == 1 and neigh1[0] == 0);
+}
+
+test "Graph removeNode first and last and out-of-bounds" {
+    const allocator = std.testing.allocator;
+
+    var g = Graph(u32, void, null).init(allocator);
+    defer g.deinit();
+
+    const n0 = try g.addNode(10); // 0
+    const n1 = try g.addNode(20); // 1
+    const n2 = try g.addNode(30); // 2
+
+    _ = try g.addEdge(n0, n1, {});
+    _ = try g.addEdge(n1, n2, {});
+
+    // Remove first node
+    try g.removeNode(n0);
+    try std.testing.expect(g.nodeCount() == 2);
+    try std.testing.expect(!g.containsEdge(0, 0)); // was 0->1
+
+    // Remove last node (current index 1)
+    try g.removeNode(1);
+    try std.testing.expect(g.nodeCount() == 1);
+
+    // Out-of-bounds remove should error
+    try std.testing.expectError(error.IndicesOutOfBounds, g.removeNode(5));
+}

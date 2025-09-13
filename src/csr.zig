@@ -157,6 +157,78 @@ pub fn Csr(comptime NodeWeight: type, comptime EdgeWeight: type) type {
             return @intCast(node_idx);
         }
 
+        /// Remove a node by index. Also removes any edges incident to the node and
+        /// reindexes all nodes with index greater than the removed one by -1.
+        pub fn removeNode(self: *Self, node: NodeIndex) !void {
+            const n = self.nodeCount();
+            if (node >= n) return CsrError.IndicesOutOfBounds;
+
+            // Build new CSR arrays excluding the removed node and incident edges
+            var new_column: ArrayListUnmanaged(u32) = .empty;
+            var new_edges: OptionalArray(EdgeWeight) = if (@sizeOf(EdgeWeight) == 0) OptionalArray(EdgeWeight).init() else .empty;
+            var new_row: ArrayListUnmanaged(usize) = .empty;
+            var new_node_weights: OptionalArray(NodeWeight) = if (@sizeOf(NodeWeight) == 0) OptionalArray(NodeWeight).init() else .empty;
+
+            // Reserve reasonable capacities
+            try new_row.ensureTotalCapacity(self.allocator, n);
+            // new_row will end with +1 appended later
+            if (@sizeOf(NodeWeight) != 0) {
+                try new_node_weights.ensureTotalCapacity(self.allocator, n - 1);
+            }
+            if (@sizeOf(EdgeWeight) != 0) {
+                // worst case all edges remain except those touching the node
+                try new_column.ensureTotalCapacity(self.allocator, self.column.items.len);
+                try new_edges.ensureTotalCapacity(self.allocator, self.edges.items.len);
+            }
+
+            var next_row_start: usize = 0;
+            for (0..n) |old_node| {
+                if (old_node == node) continue; // skip removed node
+
+                // append start pointer for this node
+                try new_row.append(self.allocator, next_row_start);
+
+                const r = self.neighborsRange(@intCast(old_node));
+                // copy edges, skipping those pointing to removed node
+                for (r.start..r.end) |eidx| {
+                    const tgt = self.column.items[eidx];
+                    if (tgt == node) continue; // drop incoming to removed
+
+                    const new_tgt: u32 = if (tgt > node) tgt - 1 else tgt;
+                    try new_column.append(self.allocator, new_tgt);
+                    try new_edges.append(self.allocator, if (@sizeOf(EdgeWeight) == 0) {} else self.edges.items[eidx]);
+                    next_row_start += 1;
+                }
+
+                // append node weight for this node
+                if (@sizeOf(NodeWeight) == 0) {
+                    try new_node_weights.append(self.allocator, {});
+                } else {
+                    try new_node_weights.append(self.allocator, self.node_weights.items[old_node]);
+                }
+            }
+            // final row pointer
+            try new_row.append(self.allocator, next_row_start);
+
+            // Swap in new arrays and deinit old ones
+            var old_column = self.column;
+            var old_edges = self.edges;
+            var old_row = self.row;
+            var old_node_weights = self.node_weights;
+
+            self.column = new_column;
+            self.edges = new_edges;
+            self.row = new_row;
+            self.node_weights = new_node_weights;
+            self.edge_count = next_row_start;
+
+            // Now free old buffers
+            old_column.deinit(self.allocator);
+            old_edges.deinit(self.allocator);
+            old_row.deinit(self.allocator);
+            old_node_weights.deinit(self.allocator);
+        }
+
         /// Add an edge from source to target with given weight
         /// Returns true if edge was added, false if it already exists
         pub fn addEdge(self: *Self, source: NodeIndex, target: NodeIndex, weight: EdgeWeight) !bool {
